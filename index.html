@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>System Kartowy Boncard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background-color: #f4f6f9;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            max-width: 400px;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        /* Styl dla przycisku Logowania (Niebieski) */
+        .btn-login {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 48%;
+            font-weight: bold;
+        }
+        .btn-login:hover { background-color: #0056b3; }
+
+        /* Styl dla przycisku Rejestracji (Zielony) */
+        .btn-register {
+            background-color: #28a745;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 48%;
+            font-weight: bold;
+            float: right;
+        }
+        .btn-register:hover { background-color: #218838; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>System Boncard</h1>
+    <p>Wprowadź dane swojej karty:</p>
+
+    <!-- Wszystko kierujemy do jednego pliku panel.php -->
+    <form action="panel.php" method="post">
+        <label>Numer karty:</label>
+        <input type="text" name="numer_karty" placeholder="Np. 1111" required>
+
+        <label>Kod PIN:</label>
+        <input type="password" name="pin" placeholder="XXXX" required>
+
+        <!-- DWA PRZYCISKI - każdy ma inną nazwę (name) -->
+        <button type="submit" name="akcja_zaloguj" class="btn-login">Zaloguj się</button>
+        <button type="submit" name="akcja_zarejestruj" class="btn-register">Zarejestruj</button>
+    </form>
+</div>
+
+</body>
+</html>

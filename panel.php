@@ -1,8 +1,11 @@
 <?php
-// ROZPOCZĘCIE SESJI - musi być na samym początku pliku!
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 session_start();
 
-echo "<h1>Centralny Panel Boncard v4.0</h1>";
+echo "<h1>Centralny Panel Boncard v4.5</h1>";
 
 $host = 'localhost';
 $db   = 'boncard_db';
@@ -11,17 +14,17 @@ $pass = '';
 
 try {
     $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8", $user, $pass);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-    // --- SCENARIUSZ 1: WYLOGOWANIE ---
+    // --- 1. AKCJA: WYLOGOWANIE ---
     if (isset($_POST['akcja_wyloguj'])) {
-        session_destroy(); // Kasujemy pamięć sesji
-        header("Location: index.html"); // Przekierowujemy z powrotem do logowania
+        session_destroy();
+        header("Location: index.html");
         exit();
     }
 
-    // --- SCENARIUSZ 2: UŻYTKOWNIK KLIKNĄŁ "KUP KAWĘ" ---
+    // --- 2. AKCJA: KUPNO KAWY ---
     if (isset($_POST['akcja_kup_kawe'])) {
-        // Pobieramy numer karty z pamięci sesji, a nie z formularza!
         $karta = $_SESSION['zalogowany_uzytkownik'];
         $koszt = 50;
 
@@ -31,17 +34,23 @@ try {
         $klient = $stmt->fetch();
 
         if ($klient && $klient['punkty'] >= $koszt) {
+            // Odejmujemy punkty
             $update_sql = "UPDATE karty SET punkty = punkty - :koszt WHERE numer_karty = :karta";
             $update_stmt = $pdo->prepare($update_sql);
             $update_stmt->execute(['koszt' => $koszt, 'karta' => $karta]);
 
-            echo "<p style='color: green; font-weight: bold;'>TRANSAKCJA UDANA! Zakupiono kawę za 50 punktów.</p>";
+            // Dodajemy wpis do historii
+            $historia_sql = "INSERT INTO transakcje (numer_karty, opis, punkty_zmiana) VALUES (:karta, 'Zakup kawy', -50)";
+            $historia_stmt = $pdo->prepare($historia_sql);
+            $historia_stmt->execute(['karta' => $karta]);
+
+            echo "<p style='color: green; font-weight: bold;'>TRANSAKCJA UDANA! Punkty zostały pobrane.</p>";
         } else {
-            echo "<p style='color: red; font-weight: bold;'>BŁĄD: Brak wystarczających środków na karcie!</p>";
+            echo "<p style='color: red; font-weight: bold;'>BŁĄD: Brak środków na karcie!</p>";
         }
     }
     
-    // --- SCENARIUSZ 3: UŻYTKOWNIK KLIKNĄŁ "ZALOGUJ SIĘ" ---
+    // --- 3. AKCJA: LOGOWANIE Z INDEX.HTML ---
     elseif (isset($_POST['akcja_zaloguj'])) {
         $karta = $_POST['numer_karty'] ?? '';
         $pin   = $_POST['pin'] ?? '';
@@ -52,16 +61,15 @@ try {
         $klient = $stmt->fetch();
 
         if ($klient) {
-            // ZAPISUJEMY NUMER KARTY W PAMIĘCI SESJI SERWERA
             $_SESSION['zalogowany_uzytkownik'] = $klient['numer_karty'];
         } else {
-            echo "<p style='color: red; font-weight: bold;'>BŁĄD: Niepoprawny numer karty lub PIN!</p>";
+            echo "<p style='color: red; font-weight: bold;'>BŁĄD: Zły numer karty lub PIN!</p>";
             echo "<p><a href='index.html'>Wróć i spróbuj ponownie</a></p>";
             exit();
         }
     } 
     
-    // --- SCENARIUSZ 4: UŻYTKOWNIK KLIKNĄŁ "ZAREJESTRUJ" ---
+    // --- 4. AKCJA: REJESTRACJA Z INDEX.HTML ---
     elseif (isset($_POST['akcja_zarejestruj'])) {
         $karta = $_POST['numer_karty'] ?? '';
         $pin   = $_POST['pin'] ?? '';
@@ -71,7 +79,7 @@ try {
         $stmt->execute(['karta' => $karta]);
         
         if ($stmt->fetch()) {
-            echo "<p style='color: orange; font-weight: bold;'>BŁĄD: Karta " . $karta . " już istnieje w systemie!</p>";
+            echo "<p style='color: orange; font-weight: bold;'>BŁĄD: Karta już istnieje!</p>";
             echo "<p><a href='index.html'>Wróć do ekranu głównego</a></p>";
             exit();
         } else {
@@ -79,41 +87,67 @@ try {
             $insert_stmt = $pdo->prepare($wstaw_sql);
             $insert_stmt->execute(['karta' => $karta, 'pin' => $pin]);
 
+            $historia_reg_sql = "INSERT INTO transakcje (numer_karty, opis, punkty_zmiana) VALUES (:karta, 'Aktywacja karty', 100)";
+            $historia_reg_stmt = $pdo->prepare($historia_reg_sql);
+            $historia_reg_stmt->execute(['karta' => $karta]);
+
             echo "<p style='color: green; font-weight: bold;'>REJESTRACJA UDANA!</p>";
-            echo "<p>Nowa karta została dodana. <a href='index.html'>Zaloguj się teraz</a></p>";
+            echo "<p><a href='index.html'>Zaloguj się teraz</a></p>";
             exit();
         }
     }
 
-    // --- BLOK WYŚWIETLANIA PANELU DLA ZALOGOWANEGO UŻYTKOWNIKA ---
-    // Ten kod wykona się tylko wtedy, gdy ktoś jest zalogowany w sesji
+    // --- 5. WYŚWIETLANIE PANELU DLA ZALOGOWANEGO ---
     if (isset($_SESSION['zalogowany_uzytkownik'])) {
         $karta_sesja = $_SESSION['zalogowany_uzytkownik'];
         
-        // Pobieramy świeże dane o punktach z bazy
         $sql = "SELECT punkty FROM karty WHERE numer_karty = :karta";
         $stmt = $pdo->prepare($sql);
         $stmt->execute(['karta' => $karta_sesja]);
         $dane_klienta = $stmt->fetch();
 
-        echo "<div style='background-color: #e9ecef; padding: 20px; border-radius: 5px; max-width: 400px;'>";
+        // Panel informacyjny (prosty, czysty HTML)
+        echo "<div style='border: 2px solid #ccc; padding: 15px; margin-bottom: 20px; max-width: 400px;'>";
         echo "<h3>Konto aktywne</h3>";
         echo "<p>Numer karty: <strong>" . $karta_sesja . "</strong></p>";
-        echo "<p>Twój stan konta to: <strong style='color: #007bff; font-size: 20px;'>" . $dane_klienta['punkty'] . " pkt</strong></p>";
+        echo "<p>Twój stan konta to: <strong style='color: blue;'>" . $dane_klienta['punkty'] . " pkt</strong></p>";
 
-        // Przycisk zakupu kawy
-        echo "<form action='panel.php' method='post' style='display:inline;'>";
-        echo "<button type='submit' name='akcja_kup_kawe' style='background-color: #ffc107; padding: 10px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;'>Kup kawę (50 pkt)</button>";
+        // Przycisk "Kup kawę" w osobnym formularzu
+        echo "<form action='panel.php' method='POST' style='margin-bottom: 10px;'>";
+        echo "<input type='submit' name='akcja_kup_kawe' value='Kup kawę (50 pkt)' style='padding: 8px; font-weight: bold; cursor: pointer;'>";
         echo "</form>";
 
-        // Przycisk wylogowania
-        echo "<form action='panel.php' method='post' style='display:inline; margin-left: 10px;'>";
-        echo "<button type='submit' name='akcja_wyloguj' style='background-color: #dc3545; color: white; padding: 10px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;'>Wyloguj się</button>";
+        // Przycisk "Wyloguj" w osobnym formularzu
+        echo "<form action='panel.php' method='POST'>";
+        echo "<input type='submit' name='akcja_wyloguj' value='Wyloguj się' style='padding: 8px; cursor: pointer;'>";
         echo "</form>";
         echo "</div>";
+
+        // Tabela historii pod spodem
+        echo "<h3>Historia operacji:</h3>";
+        $pobierz_historie_sql = "SELECT * FROM transakcje WHERE numer_karty = :karta ORDER BY data_transakcji DESC";
+        $historia_stmt = $pdo->prepare($pobierz_historie_sql);
+        $historia_stmt->execute(['karta' => $karta_sesja]);
+        $wszystkie_transakcje = $historia_stmt->fetchAll();
+
+        if ($wszystkie_transakcje) {
+            echo "<table border='1' cellpadding='8' style='border-collapse: collapse; width: 100%; max-width: 500px;'>";
+            echo "<tr style='background-color: #eee;'><th>Data</th><th>Operacja</th><th>Punkty</th></tr>";
+            foreach ($wszystkie_transakcje as $t) {
+                $kolor = ($t['punkty_zmiana'] < 0) ? 'red' : 'green';
+                echo "<tr>";
+                echo "<td>" . $t['data_transakcji'] . "</td>";
+                echo "<td>" . $t['opis'] . "</td>";
+                echo "<td style='color: $kolor; font-weight: bold;'>" . $t['punkty_zmiana'] . " pkt</td>";
+                echo "</tr>";
+            }
+            echo "</table>";
+        } else {
+            echo "<p>Brak operacji na tej karcie.</p>";
+        }
     }
 
 } catch (PDOException $e) {
-    echo "Błąd bazy danych: " . $e->getMessage();
+    echo "<h2 style='color: red;'>Błąd bazy danych:</h2><p>" . $e->getMessage() . "</p>";
 }
 ?>
